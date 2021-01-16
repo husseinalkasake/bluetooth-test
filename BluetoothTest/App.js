@@ -55,24 +55,11 @@ export default class App extends React.Component {
       name: '',
       id: '',
       locationAccessGranted: false,
-      characteristicsForEachService: [
-        [
-          {
-            serviceUUID: 'serviceUUID1',
-            uuid: 'characteristicUUID1',
-            isWritableWithResponse: true,
-          },
-        ],
-        [
-          {
-            serviceUUID: 'serviceUUID2',
-            uuid: 'characteristicUUID2',
-            isWritableWithResponse: false,
-          },
-        ],
-      ],
+      characteristicsForEachService: [],
       currentCharacteristic: null,
       valueToSend: null,
+      isScanning: false,
+      error: '',
     };
   }
 
@@ -87,6 +74,7 @@ export default class App extends React.Component {
       if (state === 'PoweredOn') {
         this.scanAndConnect();
         subscription.remove();
+        this.setState({isScanning: true});
       }
     }, true);
   }
@@ -95,20 +83,15 @@ export default class App extends React.Component {
     this.manager.startDeviceScan(null, null, (error, device) => {
       if (error) {
         console.log(error);
-        this.setState({error: 'Failed to Scan'});
+        this.setState({error: 'Failed to Scan', isScanning: false});
         return;
       }
 
       // Check if it is a device you are looking for based on advertisement data
       // or other criteria.
-      if (
-        device.id === this.state.id ||
-        device.name === this.state.name ||
-        !!device.id
-      ) {
+      if (device.id === this.state.id || device.name === this.state.name) {
         // Stop scanning as it's not necessary if you are scanning for one device.
         this.manager.stopDeviceScan();
-        debugger;
 
         // Proceed with connection.
         device
@@ -119,24 +102,25 @@ export default class App extends React.Component {
             Promise.all(services.map((service) => service.characteristics())),
           )
           .then((characteristicsForEachService) => {
-            debugger;
-            this.setState({characteristicsForEachService, error: ''});
+            this.setState({
+              characteristicsForEachService,
+              error: '',
+              isScanning: false,
+            });
           })
           .catch((error) => {
             console.log(error);
-            this.setState({error: 'Failed to Connect'});
+            this.setState({error: 'Failed to Connect', isScanning: false});
           });
       }
     });
   }
 
   showSendValueWindow(currentCharacteristic) {
-    debugger;
     this.setState({currentCharacteristic});
   }
 
   sendValue() {
-    debugger;
     this.state.currentCharacteristic
       .writeWithResponse(Number(this.state.valueToSend))
       .then((result) => {
@@ -152,8 +136,10 @@ export default class App extends React.Component {
       characteristicsForEachService,
       currentCharacteristic,
       valueToSend,
+      isScanning,
+      error,
     } = this.state;
-    const scanButtonEnabled = id !== '' || name !== '';
+    const scanButtonEnabled = (id !== '' || name !== '') && !isScanning;
     return (
       <>
         <StatusBar barStyle="dark-content" />
@@ -186,42 +172,51 @@ export default class App extends React.Component {
                   onPress={() => this.startScan()}>
                   <Text style={styles.scanButtonText}>Start Scan</Text>
                 </TouchableOpacity>
-                <ScrollView>
-                  {characteristicsForEachService.map((characteristics) => {
-                    return (
-                      <View key={characteristics[0]?.serviceUUID}>
-                        <Text
-                          style={{
-                            backgroundColor: Colors.black,
-                            color: Colors.white,
-                            paddingVertical: 5,
-                            paddingLeft: 8,
-                          }}>
-                          {'Service UUID: ' + characteristics[0]?.serviceUUID}
-                        </Text>
-                        {characteristics.map((characteristic) => {
-                          return (
-                            <Text
-                              key={characteristic.uuid}
-                              onPress={() =>
-                                characteristic.isWritableWithResponse &&
-                                this.showSendValueWindow(characteristic)
-                              }
-                              style={{
-                                paddingVertical: 5,
-                                paddingLeft: 8,
-                                backgroundColor: characteristic.isWritableWithResponse
-                                  ? '#32a852'
-                                  : '#FFFFFF',
-                              }}>
-                              {'Characteristic UUID: ' + characteristic.uuid}
-                            </Text>
-                          );
-                        })}
-                      </View>
-                    );
-                  })}
-                </ScrollView>
+                {isScanning ? (
+                  <Text>Scanning...</Text>
+                ) : (
+                  <ScrollView>
+                    {!!error && (
+                      <Text style={{color: 'red', fontWeight: 'bold'}}>
+                        {error}
+                      </Text>
+                    )}
+                    {characteristicsForEachService.map((characteristics) => {
+                      return (
+                        <View key={characteristics[0]?.serviceUUID}>
+                          <Text
+                            style={{
+                              backgroundColor: Colors.black,
+                              color: Colors.white,
+                              paddingVertical: 5,
+                              paddingLeft: 8,
+                            }}>
+                            {'Service UUID: ' + characteristics[0]?.serviceUUID}
+                          </Text>
+                          {characteristics.map((characteristic) => {
+                            return (
+                              <Text
+                                key={characteristic.uuid}
+                                onPress={() =>
+                                  characteristic.isWritableWithResponse &&
+                                  this.showSendValueWindow(characteristic)
+                                }
+                                style={{
+                                  paddingVertical: 5,
+                                  paddingLeft: 8,
+                                  backgroundColor: characteristic.isWritableWithResponse
+                                    ? '#32a852'
+                                    : '#FFFFFF',
+                                }}>
+                                {'Characteristic UUID: ' + characteristic.uuid}
+                              </Text>
+                            );
+                          })}
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
+                )}
               </View>
             </View>
           </ScrollView>
@@ -238,11 +233,14 @@ export default class App extends React.Component {
                   placeholder="Value to Send"
                   value={valueToSend}
                   style={styles.scanButton}
-                  onChangeText={(valueToSend) => this.setState({valueToSend})}
+                  onChangeText={(valueToSend) => {
+                    this.setState({valueToSend});
+                  }}
                 />
                 <Button
                   title="Send Value"
-                  onPress={() => !!valueToSend && this.sendValue()}
+                  disabled={valueToSend === null || valueToSend === ''}
+                  onPress={() => this.sendValue()}
                 />
                 <Button
                   title="Cancel"
@@ -289,16 +287,18 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   sendValuePopup: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(100, 100, 100, 0.2)',
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'absolute',
+    width: '100%',
+    height: '200%',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
   },
   sendValuePopupInnerContainer: {
     width: '80%',
-    // height: '50%',
-    justifyContent: 'center',
+    position: 'absolute',
+    top: 250,
     backgroundColor: Colors.white,
   },
 });

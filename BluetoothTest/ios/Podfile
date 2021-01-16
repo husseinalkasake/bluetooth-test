@@ -10,8 +10,6 @@ target 'BluetoothTest' do
 
   pod 'react-native-ble-plx', :path => '../node_modules/react-native-ble-plx'
 
-  pod 'react-native-camera', :path => '../node_modules/react-native-camera'
-
   target 'BluetoothTestTests' do
     inherit! :complete
     # Pods for testing
