@@ -20,6 +20,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import {BleManager} from 'react-native-ble-plx';
+import {Buffer} from 'buffer';
 
 import {Colors} from 'react-native/Libraries/NewAppScreen';
 
@@ -60,6 +61,7 @@ export default class App extends React.Component {
       valueToSend: null,
       isScanning: false,
       error: '',
+      device: null,
     };
   }
 
@@ -96,7 +98,10 @@ export default class App extends React.Component {
         // Proceed with connection.
         device
           .connect()
-          .then((device) => device.discoverAllServicesAndCharacteristics())
+          .then((device) => {
+            this.setState({device});
+            return device.discoverAllServicesAndCharacteristics();
+          })
           .then((device) => device.services())
           .then((services) =>
             Promise.all(services.map((service) => service.characteristics())),
@@ -121,12 +126,22 @@ export default class App extends React.Component {
   }
 
   sendValue() {
-    this.state.currentCharacteristic
-      .writeWithResponse(Number(this.state.valueToSend))
-      .then((result) => {
-        console.log(result);
-        this.setState({currentCharacteristic: null});
-      });
+    const {device, currentCharacteristic, valueToSend} = this.state;
+    if (device)
+      device
+        .writeCharacteristicWithResponseForService(
+          currentCharacteristic.serviceUUID,
+          currentCharacteristic.uuid,
+          Buffer.from(valueToSend).toString('base64'),
+        )
+        .then((result) => {
+          console.log(result);
+          this.setState({currentCharacteristic: null});
+        })
+        .catch((error) => {
+          console.log(error);
+          throw error;
+        });
   }
 
   render() {
