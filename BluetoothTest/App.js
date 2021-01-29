@@ -125,23 +125,43 @@ export default class App extends React.Component {
     this.setState({currentCharacteristic});
   }
 
-  sendValue() {
+  sendValue(writeWithResponse = true) {
     const {device, currentCharacteristic, valueToSend} = this.state;
-    if (device)
-      device
-        .writeCharacteristicWithResponseForService(
-          currentCharacteristic.serviceUUID,
-          currentCharacteristic.uuid,
-          Buffer.from(valueToSend).toString('base64'),
-        )
-        .then((result) => {
-          console.log(result);
-          this.setState({currentCharacteristic: null});
-        })
-        .catch((error) => {
-          console.log(error);
-          throw error;
-        });
+    if (device) {
+      if (writeWithResponse && currentCharacteristic.isWritableWithResponse)
+        device
+          .writeCharacteristicWithResponseForService(
+            currentCharacteristic.serviceUUID,
+            currentCharacteristic.uuid,
+            Buffer.from(valueToSend).toString('base64'),
+          )
+          .then((result) => {
+            console.log(result);
+            this.setState({currentCharacteristic: null});
+          })
+          .catch((error) => {
+            console.log(error);
+            throw error;
+          });
+      else if (
+        !writeWithResponse &&
+        currentCharacteristic.isWritableWithoutResponse
+      )
+        device
+          .writeCharacteristicWithoutResponseForDevice(
+            currentCharacteristic.serviceUUID,
+            currentCharacteristic.uuid,
+            Buffer.from(valueToSend).toString('base64'),
+          )
+          .then((result) => {
+            console.log(result);
+            this.setState({currentCharacteristic: null});
+          })
+          .catch((error) => {
+            console.log(error);
+            throw error;
+          });
+    }
   }
 
   render() {
@@ -213,15 +233,18 @@ export default class App extends React.Component {
                               <Text
                                 key={characteristic.uuid}
                                 onPress={() =>
-                                  characteristic.isWritableWithResponse &&
+                                  (characteristic.isWritableWithResponse ||
+                                    characteristic.isWritableWithoutResponse) &&
                                   this.showSendValueWindow(characteristic)
                                 }
                                 style={{
                                   paddingVertical: 5,
                                   paddingLeft: 8,
-                                  backgroundColor: characteristic.isWritableWithResponse
-                                    ? '#32a852'
-                                    : '#FFFFFF',
+                                  backgroundColor:
+                                    characteristic.isWritableWithResponse ||
+                                    characteristic.isWritableWithoutResponse
+                                      ? '#32a852'
+                                      : '#FFFFFF',
                                 }}>
                                 {'Characteristic UUID: ' + characteristic.uuid}
                               </Text>
@@ -253,9 +276,22 @@ export default class App extends React.Component {
                   }}
                 />
                 <Button
-                  title="Send Value"
-                  disabled={valueToSend === null || valueToSend === ''}
-                  onPress={() => this.sendValue()}
+                  title="Write With Response"
+                  disabled={
+                    valueToSend === null ||
+                    valueToSend === '' ||
+                    !currentCharacteristic.isWritableWithResponse
+                  }
+                  onPress={() => this.sendValue(true)}
+                />
+                <Button
+                  title="Write Without Response"
+                  disabled={
+                    valueToSend === null ||
+                    valueToSend === '' ||
+                    !currentCharacteristic.isWritableWithoutResponse
+                  }
+                  onPress={() => this.sendValue(false)}
                 />
                 <Button
                   title="Cancel"
